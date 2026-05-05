@@ -89,6 +89,8 @@ def main():
 
     pygame.init()
 
+    font = pygame.font.SysFont(None, 30)
+
     szerokosc = 600
     wysokosc = 600
 
@@ -96,7 +98,7 @@ def main():
     zegar = pygame.time.Clock()
 
     light_z = 0
-    
+
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -109,9 +111,11 @@ def main():
 
         keys = pygame.key.get_pressed()
         if keys[pygame.K_w]: 
-            light_z = light_z + 0.1 
+            if wspolrzedne < 10.0:
+                light_z = light_z + 0.1 
         if keys[pygame.K_s]: 
-            light_z = light_z - 0.1 
+            if wspolrzedne > -10.0:
+                light_z = light_z - 0.1
 
         czulosc = 100.0 
         light_x = (mouse_x - szerokosc / 2) / czulosc
@@ -130,6 +134,11 @@ def main():
                 punkty_2d.append(p2d)
             
             pygame.draw.polygon(ekran, poly["kolor"], punkty_2d)
+        
+        wspolrzedne = light_z - 5 
+        tekst = f"Wspolrzedna Z: {wspolrzedne:.2f}"
+        tekst_ekran = font.render(tekst, True, (255, 255, 255))
+        ekran.blit(tekst_ekran, (350, 10))
 
         pygame.display.flip()
         zegar.tick(60)
