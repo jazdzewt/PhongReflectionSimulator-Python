@@ -1,72 +1,138 @@
 import pygame
-from pygame.locals import *
-from OpenGL.GL import *
-from OpenGL.GLU import *
+import trimesh
+import math
+import sys
 
-def sfera(kolor):
 
-    # Włączamy pierwszą płaszczyznę obcinania
-    glEnable(GL_CLIP_PLANE0)
-    glClipPlane(GL_CLIP_PLANE0, (0.0, 0.0, 1.0, 0.0))
+def wektor_odejmij(v1, v2):
+    return [v1[0] - v2[0], v1[1] - v2[1], v1[2] - v2[2]]
 
-    glColor3f(kolor[0]/255, kolor[1]/255, kolor[2]/255)
+def wektor_dlugosc(v):
+    return math.sqrt(v[0]**2 + v[1]**2 + v[2]**2)
 
-    # Tworzymy obiekt quadric (podstawa do rysowania kształtów takich jak sfery czy cylindry w OpenGL)
-    sfera = gluNewQuadric()
-    # Ustawiamy styl rysowania na siatkę (GLU_LINE), dzięki temu łatwiej zauważyć, że to obiekt 3D
-    gluQuadricDrawStyle(sfera, GLU_FILL)
+def wektor_znormalizuj(v):
+    dl = wektor_dlugosc(v)
+    return [v[0]/dl, v[1]/dl, v[2]/dl] if dl > 0 else [0, 0, 0]
 
-    # Generowanie wektorów normalnych (BARDZO WAŻNE DLA ŚWIATŁA!)
-    # Bez tego światło nie będzie wiedziało, pod jakim kątem pada na sferę
-    gluQuadricNormals(sfera, GLU_SMOOTH)
-    
-    # Rysujemy sferę: promień 1, 32 podziały wzdłuż, 32 w poprzek
-    gluSphere(sfera, 1, 256, 256)#128, 128)
+def iloczyn_skalarny(v1, v2):
+    return v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2]
+
+def wektor_odbicia(L, N):
+    dot = iloczyn_skalarny(L, N)
+    return [2 * dot * N[0] - L[0], 2 * dot * N[1] - L[1], 2 * dot * N[2] - L[2]]
+
+def oblicz_kolor_phong(pozycja, normalna, poz_swiatla, poz_kamery, kolor_bazy):
+    ambient = [c * 0.1 for c in kolor_bazy]
+
+    N = wektor_znormalizuj(normalna)
+    L = wektor_znormalizuj(wektor_odejmij(poz_swiatla, pozycja))
+    sila_diffuse = max(iloczyn_skalarny(N, L), 0.0)
+    diffuse = [c * sila_diffuse for c in kolor_bazy]
+
+    V = wektor_znormalizuj(wektor_odejmij(poz_kamery, pozycja))
+    R = wektor_odbicia(L, N)
+    spec_math = max(iloczyn_skalarny(V, R), 0.0) ** 16.0
+    specular = [255 * 0.8 * spec_math] * 3 
+
+    return (
+        min(255, max(0, ambient[0] + diffuse[0] + specular[0])),
+        min(255, max(0, ambient[1] + diffuse[1] + specular[1])),
+        min(255, max(0, ambient[2] + diffuse[2] + specular[2]))
+    )
+
+def rzutuj_3d_na_2d(x, y, z, width, height, fov=600):
+    if z <= 0.1:
+        z = 0.1
+    factor = fov / z
+    x_2d = (x * factor) + (width / 2)
+    y_2d = -(y * factor) + (height / 2) 
+    return (x_2d, y_2d)
+
+
+
+mesh = trimesh.creation.icosphere(subdivisions=5, radius=1.5)
+wierzcholki = mesh.vertices.tolist()
+trojkaty = mesh.faces.tolist()
+normalne = mesh.face_normals.tolist()
+
+def przygotuj_poligony(kolor, poz_swiatla, poz_sfery_z):
+    poz_kamery = [0, 0, 0]
+    poligony = []
+
+    for idx, trojkat in enumerate(trojkaty):
+        v1 = wierzcholki[trojkat[0]]
+        v2 = wierzcholki[trojkat[1]]
+        v3 = wierzcholki[trojkat[2]]
+
+        v1_z = [v1[0], v1[1], v1[2] + poz_sfery_z]
+        v2_z = [v2[0], v2[1], v2[2] + poz_sfery_z]
+        v3_z = [v3[0], v3[1], v3[2] + poz_sfery_z]
+
+        srodek = [
+            (v1_z[0]+v2_z[0]+v3_z[0])/3, 
+            (v1_z[1]+v2_z[1]+v3_z[1])/3, 
+            (v1_z[2]+v2_z[2]+v3_z[2])/3
+        ]
+
+        norm = normalne[idx]
+        kolor_poly = oblicz_kolor_phong(srodek, norm, poz_swiatla, poz_kamery, kolor)
+        
+        poligony.append({
+            "z": srodek[2],
+            "kolor": kolor_poly,
+            "wierzcholki": [v1_z, v2_z, v3_z]
+        })
+
+    return poligony
 
 def main():
+
     pygame.init()
-    display = (600, 600)
+
+    szerokosc = 600
+    wysokosc = 600
+
+    ekran = pygame.display.set_mode((szerokosc, wysokosc))
+    zegar = pygame.time.Clock()
+
+    light_z = 0
     
-    # Inicjalizacja okna Pygame z flagami dla OpenGL i podwójnego buforowania
-    pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
-
-    # Ustawienie perspektywy: kąt widzenia, proporcje okna, najbliższy i najdalszy plan
-    gluPerspective(45, (display[0] / display[1]), 0.1, 50.0)
-
-    # 1. Włączamy system oświetlenia
-    glEnable(GL_LIGHTING)
-
-    # 2. Włączamy domyślne źródło światła nr 0 (świeci z "kamery" w stronę obiektu)
-    glEnable(GL_LIGHT0)
-
-    # 3. Włączamy śledzenie kolorów materiału (dzięki temu glColor3f będzie działać ze światłem)
-    glEnable(GL_COLOR_MATERIAL)
-    glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
-
-# ... (reszta pętli głównej) ...
-    
-    # Przesunięcie "kamery" do tyłu, abyśmy widzieli sferę
-    glTranslatef(0.0, 0.0, -5)
-
-    clock = pygame.time.Clock()
-
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                return
+                sys.exit()
+
+        ekran.fill((0, 0, 0)) 
+
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_w]: 
+            light_z = light_z + 0.1 
+        if keys[pygame.K_s]: 
+            light_z = light_z - 0.1 
+
+        czulosc = 100.0 
+        light_x = (mouse_x - szerokosc / 2) / czulosc
+        light_y = -(mouse_y - wysokosc / 2) / czulosc 
         
-        # Czyszczenie ekranu i bufora głębi
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        
-        # Wywołanie funkcji rysującej sferę
-        # kolor wektor 
-        
-        sfera([50,150,255])
-        
-        # Aktualizacja ekranu
+        light_z = light_z
+
+        poligony = przygotuj_poligony([50, 150, 255], [light_x, light_y, light_z], poz_sfery_z=5.0)
+
+        poligony.sort(key=lambda p: p["z"], reverse=True)
+
+        for poly in poligony:
+            punkty_2d = []
+            for v in poly["wierzcholki"]:
+                p2d = rzutuj_3d_na_2d(v[0], v[1], v[2], szerokosc, wysokosc)
+                punkty_2d.append(p2d)
+            
+            pygame.draw.polygon(ekran, poly["kolor"], punkty_2d)
+
         pygame.display.flip()
-        clock.tick(60)
+        zegar.tick(60)
 
 if __name__ == '__main__':
     main()
