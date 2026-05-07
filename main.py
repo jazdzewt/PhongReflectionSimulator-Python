@@ -2,34 +2,38 @@ import pygame
 import math
 import sys
 
-# =========================================================
-# 1. RĘCZNY MODEL PHONGA (CZYSTA MATEMATYKA)
-# =========================================================
-def wektor_dlugosc(v):
-    return math.sqrt(v[0]**2 + v[1]**2 + v[2]**2)
+def wek_norm(wektor):
+    dl = math.sqrt(wektor[0]**2 + wektor[1]**2 + wektor[2]**2)
 
-def wektor_znormalizuj(v):
-    dl = wektor_dlugosc(v)
-    return [v[0]/dl, v[1]/dl, v[2]/dl] if dl > 0 else [0, 0, 0]
+    n = [0, 0, 0]
 
-def iloczyn_skalarny(v1, v2):
-    return v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2]
-
-def oblicz_kolor(pozycja, normalna, swiatlo_poz, kamera_poz, kolor_bazy, material):
-    N = wektor_znormalizuj(normalna)
-    L = wektor_znormalizuj([swiatlo_poz[0] - pozycja[0], swiatlo_poz[1] - pozycja[1], swiatlo_poz[2] - pozycja[2]])
-    V = wektor_znormalizuj([kamera_poz[0] - pozycja[0], kamera_poz[1] - pozycja[1], kamera_poz[2] - pozycja[2]])
+    n[0] = wektor[0] / dl
+    n[1] = wektor[1] / dl
+    n[2] = wektor[2] / dl
     
-    ambient = [c * 0.1 for c in kolor_bazy]
+    return n
 
-    dot_nl = max(iloczyn_skalarny(N, L), 0.0)
-    diffuse = [c * dot_nl * material['diffuse'] for c in kolor_bazy]
+def il_skal(wektor1, wektor2):
 
-    dot_nl_2 = 2.0 * iloczyn_skalarny(N, L)
+    x = wektor1[0] * wektor2[0] + wektor1[1] * wektor2[1] + wektor1[2] * wektor2[2]
+
+    return x
+
+def phong(pozycja, normalna, swiatlo_poz, kamera_poz, material, kolor):
+    N = wek_norm(normalna)
+    L = wek_norm([swiatlo_poz[0] - pozycja[0], swiatlo_poz[1] - pozycja[1], swiatlo_poz[2] - pozycja[2]])
+    V = wek_norm([kamera_poz[0] - pozycja[0], kamera_poz[1] - pozycja[1], kamera_poz[2] - pozycja[2]])
+    
+    ambient = [c * 0.1 for c in kolor]
+
+    dot_nl = max(il_skal(N, L), 0.0)
+    diffuse = [c * dot_nl * material['diffuse'] for c in kolor]
+
+    dot_nl_2 = 2.0 * il_skal(N, L)
     R = [dot_nl_2 * N[0] - L[0], dot_nl_2 * N[1] - L[1], dot_nl_2 * N[2] - L[2]]
-    R = wektor_znormalizuj(R)
+    R = wek_norm(R)
     
-    spec_math = max(iloczyn_skalarny(V, R), 0.0) ** material['shininess']
+    spec_math = max(il_skal(V, R), 0.0) ** material['shininess']
     specular = [255 * material['specular'] * spec_math] * 3
 
     r = min(255, max(0, ambient[0] + diffuse[0] + specular[0]))
@@ -39,9 +43,6 @@ def oblicz_kolor(pozycja, normalna, swiatlo_poz, kamera_poz, kolor_bazy, materia
     return (int(r), int(g), int(b))
 
 
-# =========================================================
-# 2. DEFINICJE MATERIAŁÓW Z ZADANIA
-# =========================================================
 materialy = {
     pygame.K_1: {'nazwa': '1. Matowy (Kreda)',      'diffuse': 0.9, 'specular': 0.0, 'shininess': 1.0},
     pygame.K_2: {'nazwa': '2. Drewno (Pól-mat)',    'diffuse': 0.7, 'specular': 0.3, 'shininess': 16.0},
@@ -50,9 +51,6 @@ materialy = {
 }
 
 
-# =========================================================
-# 3. GŁÓWNA PĘTLA
-# =========================================================
 def main():
     pygame.init()
     
@@ -87,7 +85,7 @@ def main():
                 if event.key in materialy:
                     aktywny_material = materialy[event.key]
 
-        ekran.fill((20, 25, 30)) 
+        ekran.fill((0, 0, 0)) 
 
         # --- TWOJA LOGIKA STEROWANIA ---
         mouse_x, mouse_y = pygame.mouse.get_pos()
@@ -115,6 +113,8 @@ def main():
 
         poz_swiatla = [swiatlo_x, swiatlo_y, swiatlo_z]
         poz_kamery = [0, 0, 1000] # Kamera wisi w kosmosie przed ekranem
+
+        odleglosc_swiatla = math.sqrt(swiatlo_x**2 + swiatlo_y**2 + swiatlo_z**2)
         
         # --- RYSOWANIE MATEMATYCZNEJ SFERY ---
         pixele = pygame.PixelArray(ekran)
@@ -125,14 +125,14 @@ def main():
                     normalna = [x, y, z]
                     pozycja = [x, y, z]
                     
-                    kolor = oblicz_kolor(pozycja, normalna, poz_swiatla, poz_kamery, kolor_bazy, aktywny_material)
+                    kolor = phong(pozycja, normalna, poz_swiatla, poz_kamery, aktywny_material, [50, 150, 255])
                     pixele[srodek_x + x, srodek_y + y] = kolor
                     
         pixele.close()
 
         # --- WYŚWIETLANIE TEKSTÓW ---
         # 1. Twój tekst ze współrzędną Z
-        tekst_z = f"Wspolrzedna Z: {wspolrzedne:.2f}"
+        tekst_z = f"Wspolrzedna Z: {odleglosc_swiatla:.2f}"
         tekst_ekran_z = font.render(tekst_z, True, (255, 255, 255))
         ekran.blit(tekst_ekran_z, (350, 10))
 
