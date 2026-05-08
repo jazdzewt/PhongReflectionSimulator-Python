@@ -20,37 +20,41 @@ def il_skal(wektor1, wektor2):
     return x
 
 def phong(pozycja, material, swiatlo_poz, kamera_poz):
-    # Wektory pomocnicze
-    N = wek_norm(pozycja) # Normalna dla sfery w środku (0,0,0) to po prostu pozycja
-    L = wek_norm([swiatlo_poz[0] - pozycja[0], swiatlo_poz[1] - pozycja[1], swiatlo_poz[2] - pozycja[2]])
-    V = wek_norm([kamera_poz[0] - pozycja[0], kamera_poz[1] - pozycja[1], kamera_poz[2] - pozycja[2]])
-    
-    # 1. Składowa otoczenia (Ambient): Ia * ka
-    # Przyjmujemy Ia jako natężenie koloru bazowego
-    ambient = [c * 0.1 for c in material['kolor']]
 
-    # 2. Składowa rozproszona (Diffuse): Ip * kd * (N o L)
-    dot_nl = max(il_skal(N, L), 0.0)
-    diffuse = [c * dot_nl * material['kd'] for c in material['kolor']]
+    kolor_r = material['kolor'][0]
+    kolor_g = material['kolor'][1]
+    kolor_b = material['kolor'][2]
 
-    # 3. Składowa kierunkowa (Specular): Ip * ks * cos^n(alpha)
-    # alpha to kąt między wektorem odbicia R a wektorem do kamery V
-    dot_nl_2 = 2.0 * il_skal(N, L)
-    R = [dot_nl_2 * N[0] - L[0], dot_nl_2 * N[1] - L[1], dot_nl_2 * N[2] - L[2]]
-    R = wek_norm(R)
+    wektor_pow = wek_norm(pozycja)
     
-    cos_alpha = max(il_skal(V, R), 0.0)
-    spec_math = cos_alpha ** material['n']
-    
-    # Ip dla odblasku przyjmujemy jako 255 (białe światło punktowe)
-    specular = [255 * material['ks'] * spec_math] * 3
+    wektor_swiatlo = wek_norm([swiatlo_poz[0] - pozycja[0], swiatlo_poz[1] - pozycja[1], swiatlo_poz[2] - pozycja[2]])
+                                    
+    wektor_kamera = wek_norm([kamera_poz[0] - pozycja[0], kamera_poz[1] - pozycja[1], kamera_poz[2] - pozycja[2]])
 
-    # Sumowanie: I = Ambient + Diffuse + Specular
-    r = min(255, max(0, ambient[0] + diffuse[0] + specular[0]))
-    g = min(255, max(0, ambient[1] + diffuse[1] + specular[1]))
-    b = min(255, max(0, ambient[2] + diffuse[2] + specular[2]))
+    kat_padania = max(il_skal(wektor_pow, wektor_swiatlo), 0.0)
+    swiatlo_rozproszone = kat_padania * material['kd']
+
+
+    x = 2.0 * il_skal(wektor_pow, wektor_swiatlo)
+    kierunek_odbicia = wek_norm([x * wektor_pow[0] - wektor_swiatlo[0], x * wektor_pow[1] - wektor_swiatlo[1], x * wektor_pow[2] - wektor_swiatlo[2]])
     
-    return (int(r), int(g), int(b))
+    odbicie = max(il_skal(wektor_kamera, kierunek_odbicia), 0.0)
+
+    odblask = odbicie ** material['n']
+    swiatlo_odblasku = odblask * material['ks']
+
+    sila_bazy = 0.1 + swiatlo_rozproszone
+    
+    r = (kolor_r * sila_bazy) + (255 * swiatlo_odblasku)
+    g = (kolor_g * sila_bazy) + (255 * swiatlo_odblasku)
+    b = (kolor_b * sila_bazy) + (255 * swiatlo_odblasku)
+
+    r_koncowe = min(255, max(0, int(r)))
+    g_koncowe = min(255, max(0, int(g)))
+    b_koncowe = min(255, max(0, int(b)))
+    
+    return (r_koncowe, g_koncowe, b_koncowe)
+
 
 def main():
     pygame.init()
